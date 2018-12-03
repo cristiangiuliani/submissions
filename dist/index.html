@@ -11,8 +11,14 @@
 <body>
     <section class="submissions-container">
         <h1>Submissions Search</h1>
-        <div id="submissions-filter"></div>
+        <div id="submissions-filter">
+            <label for="searchDate">Date start:</label> <input type="date" name="searchDate"> 
+            <label for="searchDateEnd">Date end:</label> <input type="date" name="searchDateEnd"> 
+            <label for="searchAddress">Address:</label> <input type="text" name="searchAddress"> 
+            <button type="button" id="search">Go</button>
+        </div>
         <div id="submissions-list"></div>
+        <div id="submissions-pagination"></div>
     </section>
 </body>
 </html>
