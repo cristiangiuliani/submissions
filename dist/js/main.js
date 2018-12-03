@@ -1,11 +1,13 @@
-const   defaultFilter = {
+const   Submissions = {
                         page: 1, 
                         pageSize: 10,
                         dateStart: "",
                         dateEnd: "",
                         address: "",
                         sortBy: "Date", 
-                        sortVersus: -1
+                        sortVersus: -1,
+                        list: [],
+                        viewer: {}
                     };
 
 function loadJSON(file, callback) {   
@@ -21,74 +23,90 @@ function loadJSON(file, callback) {
     http.send(null);
 }
 
-function buildList(filters=defaultFilter){
+function buildList(){
     loadJSON("Submission.json", function(response) {
-        let submissions = JSON.parse(response);
-            
-        submissions = filterList(submissions, filters);
-        loadJSON("SubmissionAnswer.json", function(response) {
-            let answers = JSON.parse(response);
-            submissions.forEach(function(submission) {
-                let result = answers.filter(function(answer) {
-                    return answer.SubmissionId === submission.SubmissionId;
-                });
-                submission.SubissionAnswers = (result !== undefined) ? result : null;
+        Submissions.list = JSON.parse(response); 
+        let start = (Submissions.pageSize*Submissions.page)-(Submissions.pageSize),
+            end = start + Submissions.pageSize;
+        
+        if(Submissions.dateStart !== ''){
+            Submissions.list = Submissions.list.filter((submission)=>{
+                let subDate = new Date(submission.Date.substr(0, 10)),
+                    startDate = new Date(Submissions.dateStart),
+                    endDate = Submissions.dateEnd === '' ? new Date(Submissions.dateStart) : new Date(filters.endDate);
+                return subDate >= startDate && subDate <= endDate;
             });
-            console.log(submissions);
-            renderList(submissions);
-        });
+        }
+        if(Submissions.address !== ''){
+            Submissions.list = Submissions.list.filter((submission)=>{
+                return submission.Address.toLowerCase().includes(Submissions.address.toLowerCase());
+            });
+        }
+        Submissions.list.sort((a,b) => (a[Submissions.sortBy] > b[Submissions.sortBy]) ? Submissions.sortVersus : ((b[Submissions.sortBy] > a[Submissions.sortBy]) ? Submissions.sortVersus*(-1) : 0)); 
+        renderPagination(Submissions.list.length);
+        
+        Submissions.list = Submissions.list.slice(start,end);
+        renderList();
     });
 }
 
-function filterList(submissions={}, filters){
-    let start = (filters.pageSize*filters.page)-(filters.pageSize),
-        end = start + filters.pageSize;
-    
-    if(filters.dateStart !== ''){
-        submissions = submissions.filter((submission)=>{
-            let subDate = new Date(submission.Date.substr(0, 10)),
-                startDate = new Date(filters.dateStart),
-                endDate = filters.dateEnd === '' ? new Date(filters.dateStart) : new Date(filters.endDate);
-            return subDate >= startDate && subDate <= endDate;
-        });
-    }
-    if(filters.address !== ''){
-        submissions = submissions.filter((submission)=>{
-            return submission.Address.toLowerCase().includes(filters.address.toLowerCase());
-        });
-    }
-    submissions.sort((a,b) => (a[filters.sortBy] > b[filters.sortBy]) ? filters.sortVersus : ((b[filters.sortBy] > a[filters.sortBy]) ? filters.sortVersus*(-1) : 0)); 
-    renderPagination(submissions.length);
-    
-    submissions = submissions.slice(start,end);
-    return submissions;
+function renderList(){
+    let container = document.getElementById("submissions-list"),
+        html = "";
+
+    Submissions.list.forEach((submission)=>{
+        html += `<div data-id="${submission.SubmissionId}" class="item">
+                    <div class="id">${submission.SubmissionId}</div>
+                    <div class="date">${formatDate(submission.Date)}</div>
+                    <div class="address">${submission.Address}</div>
+                </div>`;
+    });
+    container.innerHTML = html;
 }
 
-function renderList(submissions){
-    let container = document.getElementById("submissions-list"),
-        html = "<table>";
-    loadJSON("Question.json", function(response) {
-        let questions = JSON.parse(response);
-        submissions.forEach((submission)=>{
-            let answersList = '';
-            submission.SubissionAnswers.forEach((answer)=>{
-                let result = questions.filter(function(question) {
+function buildViewer(event){
+    let current = event.target.parentElement,
+        SubmissionId = current.getAttribute("data-id"),
+        currentSubmission = Submissions.list.filter(function(submission) {
+            return parseInt(submission.SubmissionId) === parseInt(SubmissionId);
+        });;
+    Submissions.viewer.answers = [];
+    
+    loadJSON("SubmissionAnswer.json", function(response) {
+        let answers = JSON.parse(response);
+
+        answers = answers.filter(function(answer) {
+            return parseInt(answer.SubmissionId) === parseInt(SubmissionId);
+        });
+        
+        loadJSON("Question.json", function(response) {
+            let questions = JSON.parse(response);
+            answers.forEach((answer)=>{
+                    questions = questions.filter(function(question) {
                     return question.QuestionId === answer.QuestionId;
                 });
-                answer.QuestionText = (result[0] !== undefined) ? result[0].Text : null;
-                answersList += `<li>${answer.QuestionText}: ${answer.Text}</li>`;
+                answer.QuestionText = (questions[0] !== undefined) ? questions[0].Text : null;
+                Submissions.viewer.answers.push({QuestionText: answer.QuestionText, Text: answer.Text});
             });
-            html += `<tr>
-                        <td>${submission.SubmissionId}</td>
-                        <td>${formatDate(submission.Date)}</td>
-                        <td>${submission.Address}</td>
-                        <td>${submission.Latitude} ${submission.Longitude}</td>
-                        <td><ul>${answersList}</ul></td>
-                    </tr>`
+            renderViewer();
+            console.log(currentSubmission);
+            
+            initMap(currentSubmission[0].Latitude,currentSubmission[0].Longitude);
         });
-        html += "<table>";
-        container.innerHTML = html;
+        
     });
+}
+
+function renderViewer(){
+    let container = document.getElementById("submissions-answers"),
+        html = `<ul>`;
+
+    Submissions.viewer.answers.forEach((answer)=>{
+        html += `<li>${answer.QuestionText}: ${answer.Text}</li>`;
+    });
+    html += '</ul>';
+    container.innerHTML = html;
+    
     
 }
 
@@ -110,7 +128,7 @@ function formatDate(strDate='', time=false, reverse=false){
     return reverse ? `${dateArr[2]}-${dateArr[1]}-${dateArr[0]}${tail}` : `${dateArr[0]}/${dateArr[1]}/${dateArr[2]}${tail}`;
 }
 
-function setFilters(event){
+function setFilters(event, callback){
     let startDate = document.getElementsByName("searchDate")[0],
         endDate = document.getElementsByName("searchDateEnd")[0],
         address = document.getElementsByName("searchAddress")[0],
@@ -118,16 +136,15 @@ function setFilters(event){
         addressValidator = /^[a-zA-Z.,;:?ùàòè ]{3,100}$/;
     
     if(dateValidator.test(formatDate(startDate.value))){
-        defaultFilter.dateStart = formatDate(startDate.value,false,true);
+        Submissions.dateStart = formatDate(startDate.value,false,true);
     }
     if(dateValidator.test(formatDate(endDate.value))){
-        defaultFilter.dateEnd = formatDate(endDate.value,false,true);
+        Submissions.dateEnd = formatDate(endDate.value,false,true);
     }
     if(addressValidator.test(address.value)){
-        defaultFilter.address = address.value;
+        Submissions.address = address.value;
     }
-
-    buildList();
+    if (callback && typeof callback === 'function') callback();
 }
 
 /*  
@@ -143,7 +160,7 @@ function eventWrapper(event,callback) {
 
 function renderPagination(count){
     let container = document.getElementById("submissions-pagination"),
-        pageCount = Math.ceil(count/defaultFilter.pageSize),
+        pageCount = Math.ceil(count/Submissions.pageSize),
         html = '<ul>';
         
     for(let i=1; i<=pageCount; i++){
@@ -153,15 +170,72 @@ function renderPagination(count){
     container.innerHTML = html;
     container.addEventListener('click', (event)=>eventWrapper(event,(event)=>{
         let goTo = event.target.getAttribute("data-page");
-        if(goTo !== defaultFilter.page){
-            defaultFilter.page = goTo;
+        if(goTo !== Submissions.page){
+            Submissions.page = goTo;
             buildList();
         }
         
     }), false);
 }
 
+function initMap(latitude,longitude) {
+    let location = new google.maps.LatLng(latitude, longitude),
+        map = new google.maps.Map(document.getElementById('map'), {
+            center: location,
+            zoom: 3
+        }),
+        coordInfoWindow = new google.maps.InfoWindow();
+
+    coordInfoWindow.setContent(createInfoWindowContent(location, map.getZoom()));
+    coordInfoWindow.setPosition(location);
+    coordInfoWindow.open(map);
+
+    map.addListener('zoom_changed', function() {
+      coordInfoWindow.setContent(createInfoWindowContent(location, map.getZoom()));
+      coordInfoWindow.open(map);
+    });
+  }
+
+  var TILE_SIZE = 256;
+
+  function createInfoWindowContent(latLng, zoom) {
+    var scale = 1 << zoom;
+
+    var worldCoordinate = project(latLng);
+
+    var pixelCoordinate = new google.maps.Point(
+        Math.floor(worldCoordinate.x * scale),
+        Math.floor(worldCoordinate.y * scale));
+
+    var tileCoordinate = new google.maps.Point(
+        Math.floor(worldCoordinate.x * scale / TILE_SIZE),
+        Math.floor(worldCoordinate.y * scale / TILE_SIZE));
+
+    return [
+      'Chicago, IL',
+      'LatLng: ' + latLng,
+      'Zoom level: ' + zoom,
+      'World Coordinate: ' + worldCoordinate,
+      'Pixel Coordinate: ' + pixelCoordinate,
+      'Tile Coordinate: ' + tileCoordinate
+    ].join('<br>');
+  }
+
+  // The mapping between latitude, longitude and pixels is defined by the web
+  // mercator projection.
+  function project(latLng) {
+    var siny = Math.sin(latLng.lat() * Math.PI / 180);
+
+    // Truncating to 0.9999 effectively limits latitude to 89.189. This is
+    // about a third of a tile past the edge of the world tile.
+    siny = Math.min(Math.max(siny, -0.9999), 0.9999);
+
+    return new google.maps.Point(
+        TILE_SIZE * (0.5 + latLng.lng() / 360),
+        TILE_SIZE * (0.5 - Math.log((1 + siny) / (1 - siny)) / (4 * Math.PI)));
+  }
 window.onload = ()=>{
-    document.getElementById("search").addEventListener('click', (event)=>setFilters(event));
+    document.getElementById("search").addEventListener('click', (event)=>setFilters(event,buildList));
+    document.getElementById("submissions-list").addEventListener('click', (event)=>buildViewer(event));
     buildList();
 };

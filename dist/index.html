@@ -6,10 +6,13 @@
     <title>Submissions Search</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" type="text/css" media="screen" href="css/main.css" />
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDjOGU_r5ssp38QluzuihYW3PuyDAE_uYk">
+    </script>
     <script src="js/main.js"></script>
 </head>
 <body>
-    <section class="submissions-container">
+    <section class="submissions">
         <h1>Submissions Search</h1>
         <div id="submissions-filter">
             <label for="searchDate">Date start:</label> <input type="date" name="searchDate"> 
@@ -17,7 +20,14 @@
             <label for="searchAddress">Address:</label> <input type="text" name="searchAddress"> 
             <button type="button" id="search">Go</button>
         </div>
-        <div id="submissions-list"></div>
+        <div class="content">
+            <div id="submissions-list"></div>
+            <div id="submissions-viewer">
+                <div id="map"></div>
+                <div id="submissions-answers">
+            </div>
+        </div>
+        
         <div id="submissions-pagination"></div>
     </section>
 </body>
